@@ -1,27 +1,30 @@
----
-title: Instruction-Finetuned GPT-2
-emoji: ◐
-colorFrom: gray
-colorTo: gray
-sdk: gradio
-sdk_version: 4.44.0
-app_file: app.py
-pinned: false
----
+# Westley — inference backend
 
-# Instruction-Finetuned GPT-2 — inference API
-
-A GPT-2 medium (355M) model built from scratch and instruction-finetuned,
-following Sebastian Raschka's *Build a Large Language Model (From Scratch)*.
-
-This Space serves the model as an inference backend. The public front end
-that consumes it lives at the project's GitHub Pages site.
+A FastAPI service that serves an instruction-finetuned GPT-2 small (124M),
+built from scratch following Sebastian Raschka's *Build a Large Language
+Model (From Scratch)*.
 
 ## Files
-- `app.py` — loads the finetuned weights and exposes generation via Gradio.
+- `app.py` — loads the finetuned weights and exposes `POST /generate`.
 - `requirements.txt` — Python dependencies.
 - `instruction_finetuned_gpt2.pth` — the finetuned weights (tracked with Git LFS).
 
-## Calling it from the front end
-The Gradio app exposes an HTTP API. The static site posts an instruction to
-the `/call/predict` endpoint and reads back the generated response.
+## Endpoint
+`POST /generate` with JSON:
+```json
+{ "instruction": "...", "input": "", "max_new_tokens": 256, "temperature": 0.0, "top_k": 1 }
+```
+returns `{ "response": "..." }`.
+
+`GET /` is a health check.
+
+## Running locally
+```bash
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+Then POST to http://localhost:8000/generate.
+
+## Deployed on Render
+This service is deployed as a free Render web service (see `render.yaml` in the
+repo root). The static front end on GitHub Pages calls it via `fetch()`.

@@ -1,4 +1,5 @@
 torch
 tiktoken
-gradio
+fastapi
+uvicorn[standard]
 llms-from-scratch

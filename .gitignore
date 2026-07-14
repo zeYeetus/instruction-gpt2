@@ -1,5 +1,4 @@
 # Model weights are added via Git LFS in the Space, not committed to the front-end repo
-*.pth
 __pycache__/
 *.pyc
 .DS_Store

@@ -256,7 +256,7 @@
   <div class="wrap">
     <header>
       <div class="wordmark">westley</div>
-      <div class="meta">GPT-2 medium · 355M</div>
+      <div class="meta">GPT-2 medium · 124M</div>
     </header>
 
     <section class="hero">
@@ -316,10 +316,10 @@
 
 <script>
 /* ============================================================
-   CONFIG — set this to your Hugging Face Space URL after deploy.
-   e.g. "https://your-username-your-space.hf.space"
+   CONFIG — set this to your Render backend URL after deploy.
+   e.g. "https://westley-model.onrender.com"
    ============================================================ */
-const SPACE_URL = "REPLACE_WITH_YOUR_HF_SPACE_URL";
+const API_URL = "REPLACE_WITH_YOUR_RENDER_URL";
 
 /* ---------- controls ---------- */
 const tokensEl = document.getElementById("tokens");
@@ -341,8 +341,8 @@ async function generate() {
     statusEl.textContent = "Enter an instruction first.";
     return;
   }
-  if (SPACE_URL.startsWith("REPLACE")) {
-    statusEl.textContent = "Set SPACE_URL in index.html to your Space.";
+  if (API_URL.startsWith("REPLACE")) {
+    statusEl.textContent = "Set API_URL in index.html to your Render backend.";
     return;
   }
 
@@ -350,47 +350,38 @@ async function generate() {
   const topK = temperature > 0 ? 40 : 1;
 
   runBtn.disabled = true;
-  statusEl.textContent = "Generating…";
   outputEl.classList.remove("placeholder");
   outputEl.textContent = "";
+  statusEl.textContent = "Generating…";
+
+  // The free backend sleeps when idle; the first request may take
+  // up to a minute to wake it. Let the visitor know after a moment.
+  const wakeTimer = setTimeout(() => {
+    statusEl.textContent = "Waking the model… first request can take ~40s.";
+  }, 4000);
 
   try {
-    const post = await fetch(`${SPACE_URL}/call/predict`, {
+    const res = await fetch(`${API_URL}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        data: [instruction, input, Number(tokensEl.value), temperature, topK]
+        instruction,
+        input,
+        max_new_tokens: Number(tokensEl.value),
+        temperature,
+        top_k: topK
       })
     });
-    const { event_id } = await post.json();
+    clearTimeout(wakeTimer);
 
-    const res = await fetch(`${SPACE_URL}/call/predict/${event_id}`);
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let answer = "";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (line.startsWith("data:")) {
-          try {
-            const payload = JSON.parse(line.slice(5).trim());
-            if (Array.isArray(payload) && payload[0]) answer = payload[0];
-          } catch (e) { /* keepalive lines */ }
-        }
-      }
-    }
-
-    outputEl.textContent = answer || "No response returned.";
+    if (!res.ok) throw new Error("bad status " + res.status);
+    const data = await res.json();
+    outputEl.textContent = data.response || "No response returned.";
     statusEl.textContent = "Done.";
   } catch (err) {
+    clearTimeout(wakeTimer);
     outputEl.classList.add("placeholder");
-    outputEl.textContent = "Couldn't reach the model. Check the Space is running.";
+    outputEl.textContent = "Couldn't reach the model. It may be waking up — wait a moment and try again.";
     statusEl.textContent = "Request failed.";
   } finally {
     runBtn.disabled = false;

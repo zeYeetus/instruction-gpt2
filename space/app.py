@@ -12,8 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from llms_from_scratch.ch04 import GPTModel
-from llms_from_scratch.ch05 import generate, text_to_token_ids, token_ids_to_text
+from model import GPTModel, generate, text_to_token_ids, token_ids_to_text
 
 # --- Model configuration -----------------------------------------------------
 # GPT-2 small (124M) — matches the retrained weights.

@@ -2,4 +2,3 @@ torch
 tiktoken
 fastapi
 uvicorn[standard]
-llms-from-scratch

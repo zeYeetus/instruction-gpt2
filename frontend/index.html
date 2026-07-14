@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Instruction Model — GPT-2, from scratch</title>
+<style>
+  :root {
+    --paper: #f5f3ee;
+    --travertine: #e4ded2;
+    --stone: #cfc7b8;
+    --ink: #1a1a18;
+    --graphite: #6b6862;
+    --hairline: #d8d2c6;
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Signature: the animated field sits behind everything, quiet. */
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    opacity: 0.42;
+    pointer-events: none;
+  }
+
+  .veil {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(180deg,
+      rgba(245,243,238,0.35) 0%,
+      rgba(245,243,238,0.55) 45%,
+      rgba(245,243,238,0.8) 100%);
+    pointer-events: none;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 2;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 32px 120px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  header {
+    padding: 48px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .wordmark {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .meta {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--graphite);
+  }
+
+  /* Hero */
+  .hero {
+    padding: 96px 0 72px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    margin-bottom: 28px;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    max-width: 15ch;
+  }
+  .lede {
+    margin-top: 24px;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.65;
+    color: var(--graphite);
+    max-width: 54ch;
+  }
+
+  /* Console */
+  .console {
+    border-top: 1px solid var(--ink);
+    padding-top: 40px;
+  }
+  .field-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    display: block;
+    margin-bottom: 12px;
+  }
+  textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.5);
+    border: 1px solid var(--hairline);
+    border-radius: 0;
+    padding: 16px;
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--ink);
+    resize: vertical;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  textarea:focus {
+    outline: none;
+    border-color: var(--ink);
+    background: rgba(255,255,255,0.75);
+  }
+  textarea::placeholder { color: #a9a396; }
+
+  .field { margin-bottom: 28px; }
+
+  .controls {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+  .control { flex: 1; min-width: 160px; }
+  .control .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .control .val {
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 1px;
+    background: var(--ink);
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+  }
+
+  button.run {
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 0;
+    padding: 16px 28px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+  }
+  button.run:hover { background: transparent; color: var(--ink); }
+  button.run:disabled { opacity: 0.4; cursor: default; }
+  button.run:disabled:hover { background: var(--ink); color: var(--paper); }
+
+  /* Response */
+  .response {
+    margin-top: 48px;
+    border-top: 1px solid var(--hairline);
+    padding-top: 40px;
+    min-height: 40px;
+  }
+  .response .field-label { margin-bottom: 16px; }
+  .output {
+    font-size: 17px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    color: var(--ink);
+  }
+  .output.placeholder { color: #a9a396; }
+
+  .status {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--graphite);
+    font-variant-numeric: tabular-nums;
+  }
+
+  footer {
+    margin-top: auto;
+    padding-top: 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--graphite);
+  }
+  footer a { color: var(--graphite); text-decoration: none; border-bottom: 1px solid var(--hairline); padding-bottom: 1px; }
+  footer a:hover { color: var(--ink); border-color: var(--ink); }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 30px; }
+    .wrap { padding: 0 22px 80px; }
+    .hero { padding: 64px 0 48px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #gl { opacity: 0.4; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div class="veil"></div>
+
+  <div class="wrap">
+    <header>
+      <div class="wordmark">A/Model</div>
+      <div class="meta">GPT-2 medium · 355M</div>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow">Built from scratch · Instruction-finetuned</div>
+      <h1>A language model that follows what you ask.</h1>
+      <p class="lede">
+        A GPT-2 medium model implemented layer by layer — attention, normalization,
+        the transformer stack — then finetuned on instruction–response pairs.
+        Give it a task below. It runs on the actual finetuned weights.
+      </p>
+    </section>
+
+    <section class="console">
+      <div class="field">
+        <label class="field-label" for="instruction">Instruction</label>
+        <textarea id="instruction" rows="2" placeholder="Rewrite the sentence in the passive voice."></textarea>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="input">Input · optional</label>
+        <textarea id="input" rows="2" placeholder="The committee approved the proposal."></textarea>
+      </div>
+
+      <div class="controls">
+        <div class="control">
+          <div class="row">
+            <label class="field-label" for="tokens" style="margin:0">Max tokens</label>
+            <span class="val" id="tokens-val">256</span>
+          </div>
+          <input type="range" id="tokens" min="16" max="512" step="16" value="256" />
+        </div>
+        <div class="control">
+          <div class="row">
+            <label class="field-label" for="temp" style="margin:0">Temperature</label>
+            <span class="val" id="temp-val">0.0</span>
+          </div>
+          <input type="range" id="temp" min="0" max="15" step="1" value="0" />
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <button class="run" id="run">Generate response</button>
+        <span class="status" id="status"></span>
+      </div>
+
+      <div class="response">
+        <span class="field-label">Response</span>
+        <div class="output placeholder" id="output">The model's response will appear here.</div>
+      </div>
+    </section>
+
+    <footer>
+      <span>GPT-2 · from scratch</span>
+      <a href="https://github.com/rasbt/LLMs-from-scratch" id="repo-link">View the repository</a>
+    </footer>
+  </div>
+
+<script>
+/* ============================================================
+   CONFIG — set this to your Hugging Face Space URL after deploy.
+   e.g. "https://your-username-your-space.hf.space"
+   ============================================================ */
+const SPACE_URL = "REPLACE_WITH_YOUR_HF_SPACE_URL";
+
+/* ---------- controls ---------- */
+const tokensEl = document.getElementById("tokens");
+const tempEl = document.getElementById("temp");
+const tokensVal = document.getElementById("tokens-val");
+const tempVal = document.getElementById("temp-val");
+tokensEl.addEventListener("input", () => tokensVal.textContent = tokensEl.value);
+tempEl.addEventListener("input", () => tempVal.textContent = (tempEl.value / 10).toFixed(1));
+
+/* ---------- inference call ---------- */
+const runBtn = document.getElementById("run");
+const statusEl = document.getElementById("status");
+const outputEl = document.getElementById("output");
+
+async function generate() {
+  const instruction = document.getElementById("instruction").value.trim();
+  const input = document.getElementById("input").value.trim();
+  if (!instruction) {
+    statusEl.textContent = "Enter an instruction first.";
+    return;
+  }
+  if (SPACE_URL.startsWith("REPLACE")) {
+    statusEl.textContent = "Set SPACE_URL in index.html to your Space.";
+    return;
+  }
+
+  const temperature = tempEl.value / 10;
+  const topK = temperature > 0 ? 40 : 1;
+
+  runBtn.disabled = true;
+  statusEl.textContent = "Generatingâ€¦";
+  outputEl.classList.remove("placeholder");
+  outputEl.textContent = "";
+
+  try {
+    // Gradio 4 two-step API: POST to get an event id, then GET the stream.
+    const post = await fetch(`${SPACE_URL}/call/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: [instruction, input, Number(tokensEl.value), temperature, topK]
+      })
+    });
+    const { event_id } = await post.json();
+
+    const res = await fetch(`${SPACE_URL}/call/predict/${event_id}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          try {
+            const payload = JSON.parse(line.slice(5).trim());
+            if (Array.isArray(payload) && payload[0]) answer = payload[0];
+          } catch (e) { /* keepalive lines */ }
+        }
+      }
+    }
+
+    outputEl.textContent = answer || "No response returned.";
+    statusEl.textContent = "Done.";
+  } catch (err) {
+    outputEl.classList.add("placeholder");
+    outputEl.textContent = "Couldn't reach the model. Check the Space is running.";
+    statusEl.textContent = "Request failed.";
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+runBtn.addEventListener("click", generate);
+
+/* ============================================================
+   Signature background — self-contained WebGL gradient field.
+   Slow organic noise in the KÃ¶ppen stone palette. No libraries.
+   ============================================================ */
+(function () {
+  const canvas = document.getElementById("gl");
+  const gl = canvas.getContext("webgl");
+  if (!gl) { canvas.style.display = "none"; return; }
+
+  const vsrc = `
+    attribute vec2 p;
+    void main() { gl_Position = vec4(p, 0.0, 1.0); }
+  `;
+
+  const fsrc = `
+    precision highp float;
+    uniform vec2 u_res;
+    uniform float u_time;
+
+    // stone palette — pale, dry, cool; no muddy browns
+    vec3 paper      = vec3(0.965, 0.958, 0.945);
+    vec3 travertine = vec3(0.913, 0.898, 0.867);
+    vec3 stone      = vec3(0.856, 0.836, 0.800);
+    vec3 shadow     = vec3(0.800, 0.780, 0.745);
+
+    vec2 hash(vec2 p) {
+      p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+      return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+    }
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(dot(hash(i + vec2(0.0,0.0)), f - vec2(0.0,0.0)),
+                     dot(hash(i + vec2(1.0,0.0)), f - vec2(1.0,0.0)), u.x),
+                 mix(dot(hash(i + vec2(0.0,1.0)), f - vec2(0.0,1.0)),
+                     dot(hash(i + vec2(1.0,1.0)), f - vec2(1.0,1.0)), u.x), u.y);
+    }
+    float fbm(vec2 p) {
+      float v = 0.0;
+      float a = 0.5;
+      for (int i = 0; i < 5; i++) {
+        v += a * noise(p);
+        p *= 2.0;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_res.xy;
+      vec2 q = uv * 2.2;
+      float t = u_time * 0.04;
+
+      // domain-warped fbm for slow marbled movement
+      vec2 warp = vec2(fbm(q + vec2(t, 0.0)), fbm(q + vec2(0.0, t) + 5.2));
+      float n = fbm(q + warp * 0.9 + t * 0.5);
+      n = n * 0.5 + 0.5;
+
+      vec3 col = mix(paper, travertine, smoothstep(0.30, 0.62, n));
+      col = mix(col, stone, smoothstep(0.58, 0.82, n) * 0.85);
+      col = mix(col, shadow, smoothstep(0.80, 1.0, n) * 0.35);
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsrc));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsrc));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, "p");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes = gl.getUniformLocation(prog, "u_res");
+  const uTime = gl.getUniformLocation(prog, "u_time");
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const start = performance.now();
+  function frame(now) {
+    const t = reduce ? 0 : (now - start) / 1000;
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uTime, t);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
